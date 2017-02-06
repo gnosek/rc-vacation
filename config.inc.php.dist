@@ -60,33 +60,79 @@ $rcmail_config['vacation_sql_dsn'] =
 
 // read data queries
 $rcmail_config['vacation_sql_read'] =
-	array("SELECT subject AS vacation_subject, body AS vacation_message, " .
-	          "active AS vacation_enable FROM vacation " .
-	      "WHERE email=%username AND domain=%email_domain;"
-	     );
+	// MySQL
+	/**
+	array(
+		"SELECT
+			subject AS vacation_subject,
+			body AS vacation_message,
+			active AS vacation_enable,
+			activefrom AS vacation_start,
+			activeuntil AS vacation_end
+		FROM vacation
+		WHERE email=%username AND domain=%email_domain;"
+		);
+	**/
+	// PostgreSQL
+	array(
+		"SELECT
+			subject AS vacation_subject,
+			body AS vacation_message,
+			active AS vacation_enable,
+			to_char(activefrom, 'DD/MM/YYYY') AS vacation_start,
+			to_char(activeuntil, 'DD/MM/YYYY') AS vacation_end
+		FROM vacation
+		WHERE email=%username AND domain=%email_domain;"
+		);
 
 // write data queries
 $rcmail_config['vacation_sql_write'] =
-        array("DELETE FROM vacation WHERE email=%email AND " .
-                 "domain=%email_domain;",
-          "DELETE from vacation_notification WHERE on_vacation=%email;",
-          "DELETE FROM alias WHERE address=%email AND " .
-                 "domain=%email_domain;", 
-              "INSERT INTO vacation (email,domain,subject,body,created," .
-                 "active) VALUES (%email,%email_domain,%vacation_subject," .
-                    "%vacation_message,NOW(),%vacation_enable);",
-          "INSERT INTO alias (address,goto,domain,created,modified," .
-                 "active) " .
-             "SELECT %email,CONCAT(%email,',',%email_local,'#',%email_domain,'@'," .
-                "'autoreply.my.domain'),%email_domain,NOW(),NOW(),1 " .
-             "FROM mailbox WHERE username=%email AND " .
-                "domain=%email_domain AND %vacation_enable=1;",
-          "INSERT INTO alias (address,goto,domain,created,modified," .
-                 "active) " .
-             "SELECT %email,%email,%email_domain,NOW(),NOW(),1 " .
-             "FROM mailbox WHERE username=%email AND " .
-                "domain=%email_domain AND %vacation_enable=0;"
-         );
+	// MySQL
+	/**
+		array(
+			"DELETE FROM vacation WHERE email=%email AND domain=%email_domain;",
+			"INSERT INTO vacation (email,domain,subject,body,created,active,activefrom,activeuntil)
+				VALUES (%email,%email_domain,%vacation_subject,%vacation_message,NOW(),%vacation_enable,%vacation_start,%vacation_end);",
+
+			"DELETE from vacation_notification WHERE on_vacation=%email;",
+
+			//remove auto, but keep custom aliases
+			"UPDATE alias SET goto = replace(goto, CONCAT(',',%email_local,'#',%email_domain,'@','autoreply.my.domain'),''), modified = NOW() 
+				WHERE address=%email AND domain=%email_domain;",
+			//add auto
+			"UPDATE alias SET goto = CONCAT(goto,',',%email_local,'#',%email_domain,'@','autoreply.my.domain'), modified = NOW() 
+				WHERE address=%email AND domain=%email_domain AND %vacation_enable=1;",
+
+			//remove fwd, but keep the other stuff  -- good would be some variable with the old forwarder!..
+			"UPDATE alias SET goto = replace(goto, CONCAT(',',%vacation_forwarder),''), modified = NOW() 
+				WHERE address=%email AND domain=%email_domain AND %vacation_forwarder!='';",
+			//add fwd
+			"UPDATE alias SET goto = CONCAT(goto,',',%vacation_forwarder), modified = NOW() 
+				WHERE address=%email AND domain=%email_domain AND %vacation_forwarder!='' AND %vacation_enable=1;",
+		);
+	**/
+	// PostgreSQL
+		array(
+			"DELETE FROM vacation WHERE email=%email AND domain=%email_domain;",
+			"INSERT INTO vacation (email,domain,subject,body,created,active,activefrom,activeuntil)
+				VALUES (%email,%email_domain,%vacation_subject,%vacation_message,NOW(),%vacation_enable,to_timestamp(%vacation_start),to_timestamp(%vacation_end));",
+
+			"DELETE from vacation_notification WHERE on_vacation=%email;",
+
+			//remove auto, but keep custom aliases
+			"UPDATE alias SET goto = replace(goto, ','||%email_local||'#'||%email_domain||'@'||'autoreply.my.domain',''), modified = NOW()
+				WHERE address=%email AND domain=%email_domain;",
+			//add auto
+			"UPDATE alias SET goto = goto||','||%email_local||'#'||%email_domain||'@'||'autoreply.my.domain', modified = NOW()
+				WHERE address=%email AND domain=%email_domain AND %vacation_enable=true;",
+
+			//remove fwd, but keep the other stuff  -- good would be some variable with the old forwarder!..
+			"UPDATE alias SET goto = replace(goto, ','||%vacation_forwarder,''), modified = NOW()
+				WHERE address=%email AND domain=%email_domain AND %vacation_forwarder!=''",
+			//add fwd
+			"UPDATE alias SET goto = goto||','||%vacation_forwarder, modified = NOW()
+				WHERE address=%email AND domain=%email_domain AND %vacation_forwarder!='' AND %vacation_enable=true;"
+		);
 
 /*
  * LDAP driver
@@ -137,6 +183,9 @@ $rcmail_config['vacation_ldap_attr_vacationstart'] = null;
 // Attribute name to map vacation end
 $rcmail_config['vacation_ldap_attr_vacationend'] = null;
 
+// Attributes mapped to vacation start and vacation end use generalized time format
+$rcmail_config['vacation_ldap_date_use_generalized_time_format'] = True;
+
 // Attribute name to map vacation subject
 $rcmail_config['vacation_ldap_attr_vacationsubject'] = null;
 
@@ -165,17 +214,22 @@ $rcmail_config['vacation_ldap_search_base'] =
 // Search filter to read data
 $rcmail_config['vacation_ldap_search_filter'] = '(objectClass=mailAccount)';
 
+// Search scope (sub, one, or base)
+$rcmail_config['vacation_ldap_search_scope'] = 'sub';
+
 // Search attributes to read data
 $rcmail_config['vacation_ldap_search_attrs'] = array (
 												'vacationActive',
 												'vacationInfo');
 
-// array of DN to use for modify operations required to write data.
+// array of DN to use for modify operations required to write data. Leave array empty
+// if you want to search user in LDAP directory like to read data.
 $rcmail_config['vacation_ldap_modify_dns'] = array (
  'cn=%email_local,ou=Mailboxes,dc=%email_domain,ou=MailServer,dc=ldap,dc=my,dc=domain'
 );
 
-// array of operations required to write data.
+// array of operations required to write data. If you use feature to search user in LDAP
+// directory like to read data, put ops at array root
 $rcmail_config['vacation_ldap_modify_ops'] = array(
 	array ('replace' => array(
 			$rcmail_config['vacation_ldap_attr_vacationenable'] => '%vacation_enable',
