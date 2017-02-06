@@ -82,7 +82,7 @@ class vacation extends rcube_plugin
 			{
 				$val = time();
 			}
-			$date_val = substr($this->rc->config->get('vacation_sql_dsn'), 0, 5) == "mysql" ? date($format, $val) : $val;
+			$date_val = date($format, $val);
 		} else {
 			$date_val = '';
 		}
@@ -434,11 +434,6 @@ class vacation extends rcube_plugin
 		$data['vacation_keepcopyininbox'] = $this->obj->is_vacation_keep_copy_in_inbox();
 		$data['vacation_forwarder'] = $this->obj->get_vacation_forwarder();
 
-		if ( (substr($this->rc->config->get('vacation_sql_dsn'), 0, 5) == "pgsql") && ($data['vacation_enable'] == "" || $data['vacation_enable'] == "0") )
-		{
-		$data['vacation_enable'] = "false";
-		}
-
 		$ret = vacation_write ($data);
 		switch ($ret)
 		{
@@ -494,26 +489,12 @@ class vacation extends rcube_plugin
 
 		if (isset($data['vacation_start']))
 		{
-			if (substr($this->rc->config->get('vacation_sql_dsn'), 0, 5) == "pgsql")
-			{
-				$this->obj->set_vacation_start(date($this->rc->config->get('vacation_dateformat', 'm/d/Y'), $data['vacation_start']));
-			}
-			else
-			{
-				$this->obj->set_vacation_start($data['vacation_start']);
-			}
+			$this->obj->set_vacation_start($data['vacation_start']);
 		}
 
 		if (isset($data['vacation_end']))
 		{
-			if (substr($this->rc->config->get('vacation_sql_dsn'), 0, 5) == "pgsql")
-			{
-				$this->obj->set_vacation_end(date($this->rc->config->get('vacation_dateformat', 'm/d/Y'), $data['vacation_end']));
-			}
-			else
-			{
-				$this->obj->set_vacation_end($data['vacation_end']);
-			}
+			$this->obj->set_vacation_end($data['vacation_end']);
 		}
 
 		if (isset($data['vacation_subject']))
