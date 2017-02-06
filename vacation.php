@@ -500,7 +500,7 @@ class vacation extends rcube_plugin
 			}
 			else
 			{
-				$this->obj->set_vacation_end($data['vacation_start']);
+				$this->obj->set_vacation_start($data['vacation_start']);
 			}
 		}
 
